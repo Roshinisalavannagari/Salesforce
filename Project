@@ -203,3 +203,44 @@ CREATE TABLE application_status_history (
     FOREIGN KEY (application_id) REFERENCES applications(application_id),
     FOREIGN KEY (changed_by) REFERENCES users(user_id)
 );
+package com.infy.hrpipelinemanager.entity;
+
+import java.sql.Timestamp;
+
+import org.hibernate.annotations.CreationTimestamp;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+import lombok.Data;
+@Data
+@Entity
+@Table(name = "candidates")
+public class Candidate {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long candidateId;
+
+    @OneToOne
+    @JoinColumn(name = "user_id", unique = true)
+    private User user;
+
+//    @Column(columnDefinition = "TEXT")
+//    private String resumeUrl;
+//
+//    @Column(columnDefinition = "TEXT")
+//    private String coverLetterUrl;
+
+    @CreationTimestamp
+    private Timestamp createdAt;
+
+    // Constructors, getters, setters
+
+	
+}
