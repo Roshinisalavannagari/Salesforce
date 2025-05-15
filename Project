@@ -244,3 +244,92 @@ public class Candidate {
 
 	
 }
+@Service
+public class CandidateServiceImpl implements CandidateService {
+
+    @Autowired
+    private CandidateRepository candidateRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    public Optional<Candidate> getCandidateByUserId(Long userId) {
+        return candidateRepository.findByUserUserId(userId);
+    }
+
+    @Override
+    public Candidate createCandidateForUser(Long userId) {
+        User user = userRepository.findById(userId).orElseThrow(() ->
+                new IllegalArgumentException("User not found: " + userId));
+
+        if (!Role.CANDIDATE.name().equalsIgnoreCase(user.getRole().name())) {
+            throw new IllegalArgumentException("User role is not CANDIDATE");
+        }
+
+        if (candidateRepository.existsByUserUserId(userId)) {
+            throw new IllegalArgumentException("Candidate already exists for user");
+        }
+
+        Candidate candidate = new Candidate();
+        candidate.setUser(user);
+        return candidateRepository.save(candidate);
+    }
+
+    @Override
+    public boolean candidateExistsForUser(Long userId) {
+        return candidateRepository.existsByUserUserId(userId);
+    }
+}
+
+// === CandidateRepository ===
+@Repository
+public interface CandidateRepository extends JpaRepository<Candidate, Long> {
+    Optional<Candidate> findByUserUserId(Long userId);
+    boolean existsByUserUserId(Long userId);
+}
+@RestController
+@RequestMapping("/api/candidates")
+public class CandidateController {
+
+    @Autowired
+    private CandidateService candidateService;
+
+    @PostMapping("/create/{userId}")
+    public ResponseEntity<Candidate> createCandidate(@PathVariable Long userId) {
+        Candidate candidate = candidateService.createCandidateForUser(userId);
+        return new ResponseEntity<>(candidate, HttpStatus.CREATED);
+    }
+
+    @GetMapping("/by-user/{userId}")
+    public ResponseEntity<Candidate> getByUser(@PathVariable Long userId) {
+        return candidateService.getCandidateByUserId(userId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+}
+
+// === ApplicationService (simplified) ===
+@Service
+public class ApplicationService {
+
+    @Autowired
+    private ApplicationRepository applicationRepository;
+
+    @Autowired
+    private CandidateService candidateService;
+
+    public Application createApplication(Long userId, Application applicationData) {
+        Candidate candidate = candidateService.getCandidateByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Candidate not found for user"));
+
+        applicationData.setCandidate(candidate);
+        return applicationRepository.save(applicationData);
+    }
+}
+
+// === ApplicationRepository ===
+@Repository
+public interface ApplicationRepository extends JpaRepository<Application, Long> {
+    List<Application> findByCandidateCandidateId(Long candidateId);
+}
