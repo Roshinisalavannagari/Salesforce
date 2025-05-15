@@ -529,3 +529,122 @@ public class JobApplicationServiceImpl implements JobApplicationService {
     }
 
 }
+// === UserDTO ===
+package com.infy.hrpipelinemanager.dto;
+
+import com.infy.hrpipelinemanager.enums.Role;
+import lombok.Data;
+
+@Data
+public class UserDTO {
+    private Long userId;
+    private String username;
+    private String email;
+    private Role role;
+}
+
+// === UserRepository ===
+package com.infy.hrpipelinemanager.repository;
+
+import com.infy.hrpipelinemanager.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+    Optional<User> findByEmail(String email);
+    boolean existsByUsername(String username);
+    boolean existsByEmail(String email);
+}
+
+// === UserService Interface ===
+package com.infy.hrpipelinemanager.service;
+
+import com.infy.hrpipelinemanager.dto.UserDTO;
+import java.util.List;
+import java.util.Optional;
+
+public interface UserService {
+    UserDTO createUser(UserDTO userDTO);
+    Optional<UserDTO> getUserById(Long userId);
+    Optional<UserDTO> getUserByUsername(String username);
+    Optional<UserDTO> getUserByEmail(String email);
+    List<UserDTO> getAllUsers();
+    void deleteUser(Long userId);
+}
+
+// === UserServiceImpl ===
+package com.infy.hrpipelinemanager.service;
+
+import com.infy.hrpipelinemanager.dto.UserDTO;
+import com.infy.hrpipelinemanager.entity.User;
+import com.infy.hrpipelinemanager.enums.Role;
+import com.infy.hrpipelinemanager.repository.UserRepository;
+import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+@Service
+public class UserServiceImpl implements UserService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    private ModelMapper modelMapper = new ModelMapper();
+
+    @Override
+    public UserDTO createUser(UserDTO userDTO) {
+        if (userRepository.existsByUsername(userDTO.getUsername())) {
+            throw new IllegalArgumentException("Username already exists");
+        }
+        if (userRepository.existsByEmail(userDTO.getEmail())) {
+            throw new IllegalArgumentException("Email already exists");
+        }
+
+        User user = modelMapper.map(userDTO, User.class);
+        user.setRole(userDTO.getRole() != null ? userDTO.getRole() : Role.CANDIDATE);
+
+        return modelMapper.map(userRepository.save(user), UserDTO.class);
+    }
+
+    @Override
+    public Optional<UserDTO> getUserById(Long userId) {
+        return userRepository.findById(userId)
+                .map(user -> modelMapper.map(user, UserDTO.class));
+    }
+
+    @Override
+    public Optional<UserDTO> getUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .map(user -> modelMapper.map(user, UserDTO.class));
+    }
+
+    @Override
+    public Optional<UserDTO> getUserByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .map(user -> modelMapper.map(user, UserDTO.class));
+    }
+
+    @Override
+    public List<UserDTO> getAllUsers() {
+        return userRepository.findAll()
+                .stream()
+                .map(user -> modelMapper.map(user, UserDTO.class))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void deleteUser(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new IllegalArgumentException("User not found");
+        }
+        userRepository.deleteById(userId);
+    }
+}
