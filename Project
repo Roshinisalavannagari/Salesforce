@@ -374,3 +374,158 @@ public class UserServiceImpl implements UserService {
         return userRepository.save(user);
     }
 }
+package com.infy.hrpipelinemanager.service;
+
+import java.io.UnsupportedEncodingException;
+import java.sql.Timestamp;
+import java.time.Instant;
+
+import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.infy.hrpipelinemanager.dto.ApplicationDTO;
+import com.infy.hrpipelinemanager.entity.Application;
+import com.infy.hrpipelinemanager.entity.ApplicationStatus;
+import com.infy.hrpipelinemanager.entity.Candidate;
+import com.infy.hrpipelinemanager.entity.EmailTemplate;
+import com.infy.hrpipelinemanager.entity.EmailType;
+import com.infy.hrpipelinemanager.entity.JobPosting;
+import com.infy.hrpipelinemanager.exception.hrpipelinemanagerException;
+import com.infy.hrpipelinemanager.repository.CandidateRepository;
+//import com.infy.hrpipelinemanager.repository.EmailTemplateRepository;
+import com.infy.hrpipelinemanager.repository.JobApplicationRepository;
+import com.infy.hrpipelinemanager.repository.JobPostingRepository;
+import com.infy.hrpipelinemanager.utility.EmailUtil;
+
+import jakarta.mail.MessagingException;
+
+@Service()
+@Transactional
+public class JobApplicationServiceImpl implements JobApplicationService {
+
+    @Autowired
+    private JobApplicationRepository applicationRepository;
+
+    @Autowired
+    private CandidateRepository candidateRepository;
+
+    @Autowired
+    private JobPostingRepository jobPostingRepository;
+
+//    @Autowired
+//    private ModelMapper modelMapper;
+    @Autowired
+    private EmailTemplateService emailTemplateService;
+
+    @Autowired
+    private EmailUtil emailUtil;
+//    ModelMapper modelMapper=new ModelMapper();
+    /**
+     * Submit a new job application.
+     *
+     * @param dto the job application data
+     * @return application ID
+     */
+    @Override
+    public Long submitApplication(ApplicationDTO dto) throws hrpipelinemanagerException {
+    	ModelMapper modelMapper=new ModelMapper();
+
+        // Find Candidate
+        Candidate candidate = candidateRepository.findById(dto.getCandidateId())
+                .orElseThrow(() -> new hrpipelinemanagerException("ApplicationService.CANDIDATE_NOT_FOUND"));
+
+        // Find Job Posting
+        JobPosting jobPosting = jobPostingRepository.findById(dto.getJobId())
+                .orElseThrow(() -> new hrpipelinemanagerException("ApplicationService.JOB_POSTING_NOT_FOUND"));
+
+        // Map DTO to Entity
+        Application application = modelMapper.map(dto, Application.class);
+        application.setCandidate(candidate);
+        application.setJob(jobPosting);
+        application.setStatus(ApplicationStatus.APPLIED);
+        application.setAppliedAt(Timestamp.from(Instant.now()));
+        application.setLastUpdated(Timestamp.from(Instant.now()));
+
+        // Save to DB
+        Application saved = applicationRepository.save(application);
+        return saved.getApplicationId();
+    }
+
+    /**
+     * Get application by ID.
+     *
+     * @param applicationId ID to fetch
+     * @return application DTO
+     */
+    @Override
+    public ApplicationDTO getApplicationById(Long applicationId) throws hrpipelinemanagerException {
+    	ModelMapper modelMapper=new ModelMapper();
+
+        Application application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new hrpipelinemanagerException("ApplicationService.APPLICATION_NOT_FOUND"));
+
+        return modelMapper.map(application, ApplicationDTO.class);
+    }
+
+    /**
+     * Update application status.
+     *
+     * @param applicationId the application ID
+     * @param status new status
+     */
+    @Override
+    public void updateApplicationStatus(Long applicationId, String status) throws hrpipelinemanagerException {
+        Application application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new hrpipelinemanagerException("ApplicationService.APPLICATION_NOT_FOUND"));
+
+        try {
+            ApplicationStatus newStatus = ApplicationStatus.valueOf(status.toUpperCase());
+            application.setStatus(newStatus);
+            application.setLastUpdated(Timestamp.from(Instant.now()));
+            applicationRepository.save(application);
+        } catch (IllegalArgumentException e) {
+            throw new hrpipelinemanagerException("ApplicationService.INVALID_STATUS");
+        }
+    }
+
+    /**
+     * Upload resume (filepath update).
+     *
+     * @param applicationId application ID
+     * @param resumeUrl new resume path
+     */
+    @Override
+    public void uploadResumeCover(Long applicationId, String resumeUrl, String coverLetterUrl) throws hrpipelinemanagerException {
+        Application application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new hrpipelinemanagerException("ApplicationService.APPLICATION_NOT_FOUND"));
+
+        application.setResumeUrl(resumeUrl);
+        application.setCoverLetterUrl(coverLetterUrl);
+        application.setLastUpdated(Timestamp.from(Instant.now()));
+        applicationRepository.save(application);
+    }
+    
+    
+
+    @Override
+    public void sendAcknowledgmentEmail(Long applicationId) throws hrpipelinemanagerException, UnsupportedEncodingException, MessagingException {
+    	 Application application = applicationRepository.findById(applicationId)
+    	            .orElseThrow(() -> new hrpipelinemanagerException("ApplicationService.APPLICATION_NOT_FOUND"));
+
+    	    EmailTemplate template = emailTemplateService.getTemplateByType(EmailType.ACKNOWLEDGEMENT);
+
+    	    String body = template.getBody()
+    	        .replace("{candidateName}", application.getFirstName() + " " + application.getLastName())
+    	        .replace("{jobTitle}", application.getJob().getTitle());
+
+    	    String subject = template.getSubject()
+    	        .replace("{candidateName}", application.getFirstName() + " " + application.getLastName())
+    	        .replace("{jobTitle}", application.getJob().getTitle());
+
+    	    emailUtil.sendEmail(application.getEmail(), subject, body);
+
+    }
+
+}
